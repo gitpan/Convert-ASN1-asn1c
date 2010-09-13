@@ -1,0 +1,6 @@
+Revision history for Perl extension Convert::ASN1::asn1c.
+
+0.01  Mon Sep 13 10:13:54 2010
+	- original version; created by h2xs 1.23 with options
+		-AX -n Convert::ASN1::asn1c
+
