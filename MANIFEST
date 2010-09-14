@@ -2,7 +2,7 @@ Changes
 Makefile.PL
 MANIFEST
 README
+META.yml
 t/Convert-ASN1-asn1c.t
 t/test-pdu.xml
 lib/Convert/ASN1/asn1c.pm
-META.yml                                 Module meta-data (added by MakeMaker)

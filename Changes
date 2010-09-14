@@ -4,3 +4,9 @@ Revision history for Perl extension Convert::ASN1::asn1c.
 	- original version; created by h2xs 1.23 with options
 		-AX -n Convert::ASN1::asn1c
 
+0.02  Tue Sep 14 10:18:00 2010
+	- added META.yml so that CPAN Testers knows about this modules dependencies
+    - changed test script so that tests that rely on unber/enber are skipped if
+      those are not found because there is no possibility (that I know of) to
+      specify non-perl dependencies (i.e., dependencies on external programs).
+
