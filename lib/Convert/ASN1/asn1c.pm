@@ -120,7 +120,7 @@ Now use the unber tool to decode this file:
 
 The -p option instructs unber to generate xml that enber can understand. Now
 let's assume we want to take control over the two integer values, maybe because
-we want to change their values and see what happens or we want to print thir
+we want to change their values and see what happens or we want to examine their
 values in similar PDUs. We create a template with the following content:
 
     <C O="0" T="[1]" TL="2" V="12">
@@ -180,7 +180,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 
 # Preloaded methods go here.
@@ -263,6 +263,45 @@ sub encode {
 
 	return $pdu;
 }
+
+
+
+=head2 $pdu = sencode($xmltemplate, {
+                                  'value1'=>encode_integer(42, 1),
+                                  'value2'=>encode_bitstring("10010")
+                                }
+                    );
+
+The sencode function takes a template and a reference to a hash which's keys are
+names (the same that occur in the template) and values with which these
+variables in the template should be substituted.
+
+It works the same way as the encode() function but it directly takes the xml
+template as the first argument instead of a filename.
+
+=cut
+
+sub sencode {
+
+	my ($self, $text, $valueref) = @_;
+	my %values = %{$valueref};
+
+	foreach (keys %values) {	
+ 		$text =~ s/\$$_(\W)/$values{$_}$1/g;
+	}
+	if ($text =~ m/(\$.+?)("|<| |>)/) {
+		carp "Undefined variable ($1) in $text, your template contained that variable, but you didn't specify a value for it!\n";
+	}
+
+	my $pdu;
+	my @enber = qw( enber - );
+	my $h = start \@enber, \$text, \$pdu;
+	pump $h while length $text;
+	finish $h or croak "enber returned $?";
+
+	return $pdu;
+}
+
 
 =head2 $values = decode('pduname', $pdu);
 
@@ -413,6 +452,203 @@ sub decode {
 
 	return \%results;
 }
+
+=head2 $values = sdecode($xml_template, $pdu);
+
+The sdecode function takes a template and a binary pdu. It works the same way
+as the decode function, but it directly takes the template as it's first
+argument instead of a filename.
+
+=cut
+
+
+
+sub sdecode {
+
+	my ($self, $xml_template, $pdu) = @_;
+
+	my @stack;
+	my @varpos;
+
+	# try to find the packet description
+	my @lines = split(/\n/, $xml_template);
+
+	# we will parse the packet description
+	# to find out which "nodes" in the tag tree are interesting for us
+	# and we will construct a list of those interesting nodes (and how to "reach" them,
+	# i.e. which parent nodes they are located under. In the second step we will
+	# iterate over the decoded ASN data, if we are in an inetersting leaf we will decode it's value.
+	
+	foreach (@lines) {
+		if (m/<C .*?T=\"(.*?)\"/) { push @stack, $1; }
+		if (m/<\/C /) { pop @stack; }
+		if (m/<P .*?T=\"(.*?)\"/) { push @stack, $1; }
+		while (m/(\$.+?)("|<| |>)/gc) {
+			my $varname = $1;
+			if ($varname !~ m/_length$/) {
+				push(@varpos, $varname . ":" . join('|', @stack));
+			}
+		}
+		if (m/<\/P>/) { pop @stack; }
+	}
+
+	my @unber = qw( unber -p - );
+	my $text;
+	my $h = start \@unber, \$pdu, \$text;
+	pump $h while length $pdu;
+	finish $h or croak "unber returned $?";
+
+	@lines = qw();
+	@stack = qw();
+	@lines = split(/\n/, $text);
+	my %results;
+
+	foreach (@lines) {
+		my $line = $_;
+		if ($line =~ m/<C .*?T=\"(.*?)\"/) {
+			push @stack, $1;
+		}
+		if ($line =~ m/<\/C /) {
+			pop @stack;
+		}
+		if ($line =~ m/<P .*?T=\"(.*?)\"/) {
+			#check if this node is "interesting" - is there a entry in @varpos which matches the current stack
+			push @stack, $1;
+			my $current = join('|', @stack);
+			foreach (0 .. scalar(@varpos)-1) {
+				croak "Internal Parser error!\n" unless ($varpos[$_] =~ m/^\$(.*?):(.*?)$/);
+				my $varname = $1;
+				my $varposition = $2;
+				if ($varposition eq $current) {
+					# we are in an interesting node! 
+					my $value = undef;
+					my $value_len = undef;
+					my $value_type = undef;
+					if ($line =~ m/ V=\"(.*?)\".*?>(.*?)</) {
+						$value_len = $1;
+						$value = $2;
+						if ($line =~ m/A=\"(.*?)\"/) {	$value_type = $1; }
+						else { $value_type = 'UNDEFINED';  }
+						$results{$varname . '_length'} = $value_len;
+						$results{$varname . '_type'} = $value_type;
+						$results{$varname} = $value;
+						$results{$varname . '_orig'} = $value;
+						# remove the filled varpos entry
+						$varpos[$_] .= '--matched--';
+						last;
+					}
+				}
+			}
+			pop @stack;
+		}
+	}
+	
+	# now we have all interesting values in the results hash, together with
+	# their type (BE CAREFULL - "Siemens Bitstrings" have the type UNDEFINED)
+	# and length.
+
+	foreach (keys %results) {
+		my $key = $_;
+		if ($key !~ m/(_length$|_type$|_orig$)/) {
+			my $value = $results{$key};
+			my $type = $results{$key . '_type'};
+			my $length = $results{$key . '_length'};
+			if ($type eq 'OCTET STRING') {
+				$results{$key} = decode_octet_string($self, $value, $length);
+			}
+			if ($type eq 'INTEGER') {
+				$results{$key} = decode_integer($self, $value, $length);
+			}
+			if ($type =~ m/(BIT STRING|UNDEFINED)/) {
+				$results{$key} = decode_bitstring($self, $value, $length);
+			}
+			if ($type eq "GeneralizedTime") {
+				$results{$key} = decode_timestamp($self, $value, $length);
+			}
+			if ($type eq "ENUMERATED") {
+				# of course not all enumerated types are int's but
+				# in our context it seems to be a good guess
+				$results{$key} = decode_integer($self, $value, $length);
+			}
+		}
+	}
+
+	return \%results;
+}
+
+=head2 $tagpths = get_tagpaths_with_prefix($pdu, $prefix);
+
+A ASN1 PDU is contains constructed and primitive datatypes. Constructed
+datatypes can contain other constructed or primitive datatypes. Each datatype
+(constructed or primitive) is identified by a tag.
+
+This function decodes the pdu and constructs "tag paths": If a constructed
+datatype with tag "foo" contains a constructed datatype "bar" and a primitive
+datatype "moo". The constructed datatype "bar" contains a primitive datatype
+"frob", we have the following xml structure:  
+
+    <C ... T="foo">
+        <C ... T="bar">
+            <P ... T="frob"> ... </P>
+        </C ... T="bar">
+        <P ... T="moo"> ... </P>
+    </C ... T="foo">
+
+In that case we have the following "tag paths": C<foo>, C<foo|bar>,
+C<foo|bar|frob>, C<foo|moo>. This function returns all tag paths that match the
+given prefix. In the returned tag paths (as well as in the prefix) single tags
+have to be concatenated by the pipe character '|'.
+
+Note that this function doesn't require a name or a xml template for a PDU.
+It's primary usage is to decide which template should be used to extract values
+from a PDU.
+
+The result is returned as a reference to an array which contains the matching
+tag paths.
+
+=cut
+
+sub get_tagpaths_with_prefix {
+
+	my ($self, $pdu, $prefix) = @_;
+
+	my @unber = qw( unber -p - );
+	my $text;
+	my $h = start \@unber, \$pdu, \$text;
+	pump $h while length $pdu;
+	finish $h or croak "unber returned $?";
+
+	my @stack = qw();
+	my @results = qw();
+	my @lines = split(/\n/, $text);
+	$prefix = quotemeta($prefix);
+
+	foreach (@lines) {
+		my $line = $_;
+		if ($line =~ m/<C .*?T=\"(.*?)\"/) {
+			push @stack, $1;
+			my $current = join('|', @stack);
+			if ($current =~ m/^ $prefix/x) {
+				push @results, $current;
+			}
+		}
+		if ($line =~ m/<\/C /) {
+			pop @stack;
+		}
+		if ($line =~ m/<P .*?T=\"(.*?)\"/) {
+			push @stack, $1;
+			my $current = join('|', @stack);
+			if ($current =~ m/^$prefix/) {
+				push @results, $current;
+			}
+			pop @stack;
+		}
+	}
+
+	return \@results;
+
+}
+
 
 =head2 Encoding Functions
 

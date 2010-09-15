@@ -1,16 +1,13 @@
-Convert-ASN1-asn1c version 0.01
+Convert-ASN1-asn1c version 0.04
 ===============================
 
-The README is used to introduce the module and provide instructions on
-how to install the module, any machine dependencies it may have (for
-example C compilers and installed libraries) and any other information
-that should be provided before the module is installed.
+This module let's you encode/decode BER encoded ASN.1 PDUs via the asn1c tools
+enber/unber. The key difference to the Convert::ASN1 module on CPAN is that it
+doesn't require (and can not make use of) the ASN.1 specification for the PDUs
+you want to de/encode.
 
-A README file is required for CPAN modules since CPAN extracts the
-README file from a module distribution so that people browsing the
-archive can use it get an idea of the modules uses. It is usually a
-good idea to provide version information here so that people can
-decide whether fixes for the module are worth downloading.
+Please see the module documentation (perldoc Convert::ASN1::asn1c) for more
+information on how this module is used.
 
 INSTALLATION
 
@@ -23,13 +20,22 @@ To install this module type the following:
 
 DEPENDENCIES
 
-This module requires these other modules and libraries:
+This module requires the following perl modules available on CPAN:
 
-  blah blah blah
+   Test::More
+   Carp
+   File::Slurp
+   IPC::Run
+   File::Which
+   FindBin
+   ExtUtils::MakeMaker
+
+This module uses the binaries "enber" and "unber" which are distributed with
+"Open Source ASN.1 Compiler" asn1c, available from http://lionet.info/asn1c/ or
+directly from your linux distro, i.e. apt-get install asn1c on debian. These
+executables have to be in your $PATH for this module to find them!
 
 COPYRIGHT AND LICENCE
-
-Put the correct copyright and licence information here.
 
 Copyright (C) 2010 by Timo Schneider
 
