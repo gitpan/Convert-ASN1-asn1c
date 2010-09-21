@@ -3,7 +3,6 @@ package Convert::ASN1::asn1c;
 use Carp;
 use strict;
 use warnings;
-use 5.010001;
 use File::Slurp;
 use IPC::Run qw(run pump start finish);
 
@@ -180,7 +179,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 
 # Preloaded methods go here.

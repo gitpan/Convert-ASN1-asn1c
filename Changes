@@ -24,3 +24,6 @@ Revision history for Perl extension Convert::ASN1::asn1c.
       values from the binary PDU in cases where the application protocol
       allows the arrival of several different PDUs
     - Put usefull information in the README file
+
+0.05  Tue Sep 21 11:02:00 2010
+    - removed dependency on too recent perl version
