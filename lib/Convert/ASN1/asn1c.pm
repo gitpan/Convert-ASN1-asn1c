@@ -179,7 +179,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 
 # Preloaded methods go here.
@@ -198,6 +198,7 @@ sub new {
     my $self = {};
     bless ($self, $class_name);
 	$self->{'_templatedir'} = '.';
+	$self->{'_size_autocorrection'} = 1;
     return $self;
 }
 
@@ -219,6 +220,33 @@ sub set_templatedir {
 	}
 }
 
+=head2 enable_sizecorr()
+
+It is easily possible to produce invalid ASN1 packets with this module if you
+specify incorrect sizes for the values in your template. If you turn on
+automatic size correction with this function, such errors are automatically
+corrected for you. Note that automatic size correction is turned on by default.
+
+=cut
+
+sub enable_sizecorr {
+	my ($self, $dir) = @_;
+	$self->{'_size_autocorrection'} = 1;
+}
+
+=head2 disable_sizecorr()
+
+It is easily possible to produce invalid ASN1 packets with this module if you
+specify incorrect sizes for the values in your template. If you turn off
+automatic size correction with this function, such errors are NOT automatically
+corrected for you. Note that automatic size correction is turned on by default.
+
+=cut
+
+sub disable_sizecorr {
+	my ($self, $dir) = @_;
+	$self->{'_size_autocorrection'} = 0;
+}
 
 
 
@@ -252,6 +280,10 @@ sub encode {
 	}
 	if ($text =~ m/(\$.+?)("|<| |>)/) {
 		carp "Undefined variable ($1) in $pduname, your template contained that variable, but you didn't specify a value for it!\n";
+	}
+
+	if ($self->{'_size_autocorrection'}) {
+		$text = correct_sizes($self, $text);
 	}
 
 	my $pdu;
@@ -292,6 +324,10 @@ sub sencode {
 		carp "Undefined variable ($1) in $text, your template contained that variable, but you didn't specify a value for it!\n";
 	}
 
+	if ($self->{'_size_autocorrection'}) {
+		$text = correct_sizes($self, $text);
+	}
+
 	my $pdu;
 	my @enber = qw( enber - );
 	my $h = start \@enber, \$text, \$pdu;
@@ -300,6 +336,77 @@ sub sencode {
 
 	return $pdu;
 }
+
+
+sub correct_sizes {
+	my ($self, $text) = @_;
+
+	my @lines = split(/\n/, $text);
+	
+	my $current_offset = 0;
+	my @stack;
+	foreach (0 .. scalar(@lines)-1) {
+		if ($lines[$_] =~ m/<P O="(\d+)" T="(.+?)" TL="(\d+)" V="(\d+)"(.*?)>(.+?)<\/P>/) {
+			my $offset = $1;
+			my $tag = $2;
+			my $tag_length = $3;
+			my $value_length = $4;
+			my $rest = $5;
+			my $value = $6;
+
+			$offset = $current_offset;
+			#count number of bytes in $value
+			$value_length = () = $value =~ /&#x..;/g; 
+			#replace this line with the corrected values
+			$lines[$_] = "<P O=\"$offset\" T=\"$tag\" TL=\"$tag_length\" V=\"$value_length\"$rest)>$value</P>";
+			$current_offset += $tag_length;
+			$current_offset += $value_length;
+		}
+		if ($lines[$_] =~ m/<C O="(\d+)" T="(.+?)" TL="(\d+)" V="(\d+)"(.*?)>/) {
+			my $offset = $1;
+			my $tag = $2;
+			my $tag_length = $3;
+			my $value_length = $4;
+			my $rest = $5;
+			$offset = $current_offset;
+			#replace this line with the corrected values
+			$lines[$_] = "<C O=\"$offset\" T=\"$tag\" TL=\"$tag_length\" V=\"$value_length\"$rest)>";
+			$current_offset += $tag_length;
+			# put this line number on the stack, so that we can jump back here and fill in the value length once we know it
+			push @stack, $_;
+		}
+		if ($lines[$_] =~ m/<\/C O=\"(\d+)\" T=\"(.+?)\"(.+?)L=\"(\d+)\">/) {
+			my $offset = $1;
+			my $tag = $2;
+			my $rest = $3;
+			my $length = $4;
+			$offset = $current_offset;
+
+			my $opening_line = pop @stack;
+			if ($lines[$opening_line] =~ m/<C O="(\d+)" T="(.+?)" TL="(\d+)" V="(\d+)"(.*?)>/) {
+				my $op_offset = $1;
+				my $op_tag = $2;
+				my $op_tag_length = $3;
+				my $op_value_length = $4;
+				my $op_rest = $5;
+				$op_value_length = $current_offset - $op_offset - $op_tag_length;
+				$length =  $current_offset - $op_offset;
+				$lines[$opening_line] = "<C O=\"$op_offset\" T=\"$op_tag\" TL=\"$op_tag_length\" V=\"$op_value_length\"$op_rest)>";
+			}
+			else {
+				die "Internal error, file bug report!\n";
+			}
+
+			#replace this line with the corrected values
+			$lines[$_] = "</C O=\"$current_offset\" T=\"$tag\"$rest L=\"$length\">";
+		}
+	}
+
+	$text = join("\n", @lines);
+
+	return $text;
+}
+
 
 
 =head2 $values = decode('pduname', $pdu);
@@ -435,7 +542,7 @@ sub decode {
 			if ($type eq 'INTEGER') {
 				$results{$key} = decode_integer($self, $value, $length);
 			}
-			if ($type =~ m/(BIT STRING|UNDEFINED)/) {
+			if ($type =~ m/(BIT STRING)/) {
 				$results{$key} = decode_bitstring($self, $value, $length);
 			}
 			if ($type eq "GeneralizedTime") {
@@ -558,7 +665,7 @@ sub sdecode {
 			if ($type eq 'INTEGER') {
 				$results{$key} = decode_integer($self, $value, $length);
 			}
-			if ($type =~ m/(BIT STRING|UNDEFINED)/) {
+			if ($type =~ m/(BIT STRING)/) {
 				$results{$key} = decode_bitstring($self, $value, $length);
 			}
 			if ($type eq "GeneralizedTime") {

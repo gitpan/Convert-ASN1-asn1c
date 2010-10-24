@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Convert-ASN1-asn1c
-version:            0.05
+version:            0.06
 abstract:           A perl module to convert ASN1 to XML and back, using the
 author:
     - Timo Schneider <timos@informatik.tu-chemnitz.de>

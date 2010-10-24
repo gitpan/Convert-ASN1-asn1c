@@ -27,3 +27,16 @@ Revision history for Perl extension Convert::ASN1::asn1c.
 
 0.05  Tue Sep 21 11:02:00 2010
     - removed dependency on too recent perl version
+
+0.06  Sun Oct 24 18:48:00 2010
+    - added size autocorrection, which fixes the following problem:
+	  if the template was obtained from a asn1 pdu where a field was of a
+	  certain length and we encode a new packet with a field of different
+	  length the field length specification of the changed field will be
+	  set to the correct value by the encoding routines - however, the
+	  sizes of all enclosing constructed fields remain as they are in
+	  the template. That causes enber to generate invalid pdus as enber
+	  does not recalculate these sizes by itself
+	- fields of unknown datatype are no longer treated as bit string fields
+	  as the encoding of bitstrings has to follow certain rules which are
+	  not always met by arbitrary fields
