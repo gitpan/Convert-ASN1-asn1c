@@ -40,3 +40,6 @@ Revision history for Perl extension Convert::ASN1::asn1c.
 	- fields of unknown datatype are no longer treated as bit string fields
 	  as the encoding of bitstrings has to follow certain rules which are
 	  not always met by arbitrary fields
+
+0.07  Mon Oct 25 17:38:00 2010
+	- fixed a regex matching bug in the size autocorrection code

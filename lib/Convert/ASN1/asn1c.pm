@@ -179,7 +179,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 
 # Preloaded methods go here.
@@ -346,7 +346,7 @@ sub correct_sizes {
 	my $current_offset = 0;
 	my @stack;
 	foreach (0 .. scalar(@lines)-1) {
-		if ($lines[$_] =~ m/<P O="(\d+)" T="(.+?)" TL="(\d+)" V="(\d+)"(.*?)>(.+?)<\/P>/) {
+		if ($lines[$_] =~ m/<P O="(\d+)" T="(.+?)" TL="(\d+)" V="(\d+)"(.*?)>(.*?)<\/P>/) {
 			my $offset = $1;
 			my $tag = $2;
 			my $tag_length = $3;
